@@ -481,6 +481,26 @@ io.on('connection', socket => {
     broadcast(r);
   });
 
+  // Une partie de ce prof est-elle encore ouverte ? (pour proposer de la reprendre)
+  socket.on('host:check', (d, cb) => {
+    const r = rooms.get(String((d && d.code) || '').toUpperCase());
+    if (!r || r.hostKey !== (d && d.hostKey)) return reply(cb, { ok: false });
+    reply(cb, { ok: true, code: r.code, phase: r.phase, players: connectedPlayers(r).length });
+  });
+
+  // Fermer la partie : les élèves sont prévenus et la salle est supprimée
+  socket.on('host:close', d => {
+    let r = hostRoom();
+    if (!r && d) {
+      const c = rooms.get(String(d.code || '').toUpperCase());
+      if (c && c.hostKey === d.hostKey) r = c;
+    }
+    if (!r) return;
+    clearTimer(r);
+    for (const p of r.players.values()) if (p.connected) io.to(p.socketId).emit('closed');
+    rooms.delete(r.code);
+  });
+
   socket.on('host:kick', name => {
     const r = hostRoom();
     if (!r || r.phase !== 'lobby') return;
