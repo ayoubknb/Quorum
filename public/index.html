@@ -144,6 +144,14 @@ socket.on('connect', () => {
   if (prev && prev.pid && (!urlCode || urlCode.toUpperCase() === prev.code)) join({ code: prev.code, pid: prev.pid, name: prev.name });
 });
 
+socket.on('closed', () => {
+  store(null);
+  S = null;
+  $('game').classList.add('hidden');
+  $('join').classList.remove('hidden');
+  $('err').textContent = 'L\'animateur a fermé la partie.';
+});
+
 socket.on('kicked', () => {
   store(null);
   S = null;

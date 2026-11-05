@@ -43,6 +43,11 @@ h1{font-size:2.2rem;margin:0 0 4px}
 .pill{background:var(--panel2);border-radius:999px;padding:6px 14px;font-weight:700}
 .pill.code{background:var(--accent);color:#1b1400;letter-spacing:.12em}
 .spacer{flex:1}
+.mini{padding:7px 14px;border-radius:999px;font-size:.9rem;background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+.mini:hover{border-color:var(--accent)}
+.mini.quit:hover{border-color:var(--bad);color:#ffb3b0}
+.resume{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:#262a1e;border:2px solid var(--accent);border-radius:14px;padding:14px 18px;margin-bottom:8px}
+.resume-btns{display:flex;gap:10px}
 
 /* Lobby */
 .lobby{display:grid;grid-template-columns:1fr 280px;gap:28px;align-items:start}
@@ -104,6 +109,14 @@ h1{font-size:2.2rem;margin:0 0 4px}
   <h1>Quorum</h1>
   <p class="sub">Quiz où toute la classe vote pour donner une seule réponse.</p>
 
+  <div class="resume hidden" id="resumeBox">
+    <span id="resumeText"></span>
+    <span class="resume-btns">
+      <button class="btn" id="resumeBtn">Reprendre</button>
+      <button class="btn2" id="closeOldBtn">La fermer</button>
+    </span>
+  </div>
+
   <div class="label">Mode de décision</div>
   <div class="modes" id="modes"></div>
 
@@ -134,6 +147,8 @@ h1{font-size:2.2rem;margin:0 0 4px}
     <span class="spacer"></span>
     <span class="pill" id="hPlayers"></span>
     <span class="pill" id="hScore"></span>
+    <button class="mini" id="topRestart">Recommencer</button>
+    <button class="mini quit" id="topQuit">Quitter</button>
   </div>
 
   <div class="wrap">
@@ -252,16 +267,62 @@ function updateCounts() {
 $('createBtn').onclick = () => {
   const mode = (document.querySelector('input[name=mode]:checked') || {}).value;
   socket.emit('host:create', { mode, cats: checked('#cats'), levels: checked('#levels'), nb: $('nb').value, timer: $('timer').value }, res => {
-    if (res && res.ok) store({ code: res.code, hostKey: res.hostKey });
+    if (res && res.ok) { store({ code: res.code, hostKey: res.hostKey }); inGame = true; }
   });
 };
 
+// inGame : la page affiche déjà une partie. Si la connexion saute pendant le jeu, on se reconnecte tout seul.
+// En arrivant sur /host, on propose plutôt de reprendre ou de fermer l'ancienne partie.
+let inGame = false;
 socket.on('connect', () => {
   const saved = load();
-  if (saved) socket.emit('host:resume', saved, res => { if (!res || !res.ok) { store(null); showSetup(); } });
+  if (!saved) return;
+  if (inGame) {
+    socket.emit('host:resume', saved, res => { if (!res || !res.ok) leaveToSetup(); });
+    return;
+  }
+  socket.emit('host:check', saved, res => {
+    if (!res || !res.ok) { store(null); return; }
+    const where = res.phase === 'lobby' ? 'en salle d\'attente' : res.phase === 'end' ? 'terminée' : 'en cours';
+    $('resumeText').innerHTML = `Une partie est encore ouverte (code <b>${esc(res.code)}</b>, ${where}, ${res.players} joueur${res.players > 1 ? 's' : ''} connecté${res.players > 1 ? 's' : ''}).`;
+    $('resumeBox').classList.remove('hidden');
+  });
 });
 
+$('resumeBtn').onclick = () => {
+  const saved = load();
+  socket.emit('host:resume', saved, res => {
+    $('resumeBox').classList.add('hidden');
+    if (res && res.ok) inGame = true; else store(null);
+  });
+};
+$('closeOldBtn').onclick = () => {
+  socket.emit('host:close', load());
+  store(null);
+  $('resumeBox').classList.add('hidden');
+};
+
 function showSetup() { $('setup').classList.remove('hidden'); $('game').classList.add('hidden'); }
+
+function leaveToSetup() {
+  store(null);
+  inGame = false;
+  S = null;
+  qrDoneFor = null;
+  $('resumeBox').classList.add('hidden');
+  showSetup();
+}
+
+function quitGame() {
+  if (!confirm('Quitter la partie ? Elle sera fermée pour tous les joueurs.')) return;
+  socket.emit('host:close');
+  leaveToSetup();
+}
+$('topQuit').onclick = quitGame;
+$('topRestart').onclick = () => {
+  if (S && S.phase !== 'lobby' && !confirm('Recommencer ? Le score repart à zéro avec de nouvelles questions. Les joueurs restent connectés.')) return;
+  socket.emit('host:restart');
+};
 
 // ---------- Boutons ----------
 $('startBtn').onclick = () => socket.emit('host:start');
@@ -269,10 +330,11 @@ $('skipBtn').onclick = () => socket.emit('host:skip');
 $('accSkip').onclick = () => socket.emit('host:skip');
 $('nextBtn').onclick = () => socket.emit('host:next');
 $('restartBtn').onclick = () => socket.emit('host:restart', { mode: $('reMode').value });
-$('newRoomBtn').onclick = () => { store(null); location.reload(); };
+$('newRoomBtn').onclick = () => { socket.emit('host:close'); leaveToSetup(); };
 
 // ---------- Affichage ----------
 socket.on('state', s => {
+  if (!inGame) return;
   S = s;
   offset = s.now - Date.now();
   render(s);
@@ -420,7 +482,7 @@ function renderAccuse(s) {
 function renderEnd(s) {
   show('vEnd');
   const good = (s.results || []).filter(r => r.correct).length;
-  $('finalScore').textContent = `${s.score} pts — ${good} / ${s.total} bonnes réponses`;
+  $('finalScore').textContent = `${s.score} pt${Math.abs(s.score) > 1 ? "s" : ""} — ${good} / ${s.total} bonne${good > 1 ? "s" : ""} réponse${good > 1 ? "s" : ""}`;
   const ir = s.impostorResult;
   const box = $('impBox');
   if (ir) {
@@ -429,7 +491,7 @@ function renderEnd(s) {
     if (ir.tie) h = '<b>Égalité dans les votes :</b> personne n\'a été désigné.';
     else if (!ir.accusedName) h = '<b>Personne n\'a voté.</b>';
     else if (ir.found) h = `<b style="color:var(--good)">Démasqué !</b> La classe a désigné ${esc(ir.accusedName)}, qui était bien imposteur.`;
-    else h = `<b style="color:var(--bad)">Raté !</b> La classe a désigné ${esc(ir.accusedName)}, qui était innocent.`;
+    else h = `<b style="color:var(--bad)">Raté !</b> La classe a désigné ${esc(ir.accusedName)}, qui n'était pas l'imposteur.`;
     h += `<br>Imposteur${ir.impostors.length > 1 ? 's' : ''} : <b>${ir.impostors.map(esc).join(', ')}</b>`;
     if (ir.ranking.length) h += '<br><span style="color:var(--muted)">Votes : ' + ir.ranking.map(r => `${esc(r.name)} (${r.votes})`).join(', ') + '</span>';
     box.innerHTML = h;
