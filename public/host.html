@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quorum — Écran prof</title>
+<style>
+:root{
+  --bg:#0f1420;--panel:#182033;--panel2:#212b42;--line:#2e3a56;--text:#f3f5fa;--muted:#98a3bb;
+  --accent:#ffc83d;--good:#2fcf74;--bad:#ef5350;
+  --c0:#e8553f;--c1:#2f7fe8;--c2:#d9a400;--c3:#22a35a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.35}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;padding:12px 22px;font-weight:700}
+button:disabled{opacity:.4;cursor:not-allowed}
+.btn{background:var(--accent);color:#1b1400}
+.btn2{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+.wrap{max-width:1200px;margin:0 auto;padding:20px}
+.hidden{display:none!important}
+h1{font-size:2.2rem;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 24px}
+.label{font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:22px 0 10px;font-weight:700}
+
+/* Setup */
+.modes{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.mode{background:var(--panel);border:2px solid var(--line);border-radius:14px;padding:14px 16px;cursor:pointer;display:block}
+.mode input{display:none}
+.mode b{display:block;font-size:1.1rem;margin-bottom:4px}
+.mode span{color:var(--muted);font-size:.92rem}
+.mode.sel{border-color:var(--accent);background:#262a1e}
+.row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:6px}
+.field input,.field select{font:inherit;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:120px}
+.cats{display:flex;flex-wrap:wrap;gap:8px}
+.chk{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer;user-select:none}
+.chk input{margin-right:6px}
+
+/* Barre du haut */
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+.pill{background:var(--panel2);border-radius:999px;padding:6px 14px;font-weight:700}
+.pill.code{background:var(--accent);color:#1b1400;letter-spacing:.12em}
+.spacer{flex:1}
+
+/* Lobby */
+.lobby{display:grid;grid-template-columns:1fr 280px;gap:28px;align-items:start}
+.joinbox{background:var(--panel);border-radius:18px;padding:26px}
+.joinbox .url{font-size:1.6rem;font-weight:800;word-break:break-all}
+.bigcode{font-size:5.5rem;font-weight:900;letter-spacing:.18em;color:var(--accent);line-height:1;margin:10px 0}
+#qr{background:#fff;padding:14px;border-radius:16px;display:inline-block}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{background:var(--panel2);border-radius:999px;padding:7px 14px;font-weight:600}
+.chip.off{opacity:.4}
+.chip.voted{background:#1d3b2a;color:#9df0c0}
+.chip.kick{cursor:pointer}
+.chip.kick:hover{background:#4a2020}
+.warn{color:var(--accent);margin-top:12px}
+
+/* Question */
+.phasebar{display:flex;align-items:center;gap:16px;margin-bottom:14px}
+.phase{font-size:1.5rem;font-weight:800}
+.timer{margin-left:auto;font-size:3rem;font-weight:900;min-width:90px;text-align:right;font-variant-numeric:tabular-nums}
+.timer.low{color:var(--bad)}
+.cat{color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:.9rem}
+.qtext{font-size:2.4rem;font-weight:800;margin:6px 0 22px}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tile{position:relative;overflow:hidden;border-radius:16px;padding:20px 22px;background:var(--panel);border:3px solid transparent;min-height:96px;display:flex;align-items:center;gap:16px}
+.tile .bar{position:absolute;left:0;top:0;bottom:0;opacity:.28;transition:width .35s}
+.tile .letter{position:relative;width:52px;height:52px;border-radius:12px;display:grid;place-items:center;font-weight:900;font-size:1.5rem;color:#fff;flex:none}
+.tile .txt{position:relative;font-size:1.6rem;font-weight:700;flex:1}
+.tile .n{position:relative;font-size:1.5rem;font-weight:800;color:var(--muted)}
+.tile.good{border-color:var(--good)}
+.tile.dim{opacity:.45}
+.tile.picked{opacity:1;border-color:var(--bad)}
+.tile.picked.good{border-color:var(--good)}
+.tile.picked .txt::after{content:"  ← la classe";color:var(--accent);font-size:1rem}
+.status{margin-top:16px;color:var(--muted);font-size:1.2rem}
+.status b{color:var(--text)}
+.ctrls{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+.reveal{font-size:2rem;font-weight:900;margin:18px 0 0}
+.reveal.ok{color:var(--good)}.reveal.ko{color:var(--bad)}
+.note{color:var(--muted);font-size:1.1rem;margin-top:6px}
+
+/* Fin */
+.final{font-size:4rem;font-weight:900;color:var(--accent)}
+.res{list-style:none;padding:0;margin:0}
+.res li{background:var(--panel);border-radius:12px;padding:10px 14px;margin-bottom:8px;display:flex;gap:12px}
+.res .mk{font-weight:900;width:28px}
+.box{background:var(--panel);border-radius:16px;padding:18px 20px;margin:18px 0}
+
+@media (max-width:800px){
+  .lobby{grid-template-columns:1fr}
+  .choices{grid-template-columns:1fr}
+  .qtext{font-size:1.6rem}.tile .txt{font-size:1.2rem}.bigcode{font-size:3.5rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Réglages ===== -->
+<section id="setup" class="wrap">
+  <h1>Quorum</h1>
+  <p class="sub">Quiz où toute la classe vote pour donner une seule réponse.</p>
+
+  <div class="label">Mode de décision</div>
+  <div class="modes" id="modes"></div>
+
+  <div class="label">Réglages</div>
+  <div class="row">
+    <div class="field"><label for="nb">Nombre de questions</label><input id="nb" type="number" min="3" max="60" value="10"></div>
+    <div class="field"><label for="timer">Durée d'un vote</label>
+      <select id="timer"><option value="15">15 s</option><option value="20">20 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="90">90 s</option></select>
+    </div>
+  </div>
+
+  <div class="label">Niveau</div>
+  <div class="cats" id="levels"></div>
+
+  <div class="label">Catégories</div>
+  <div class="cats" id="cats"></div>
+  <p class="sub" style="margin:12px 0 0" id="dispo"></p>
+
+  <div class="ctrls"><button class="btn" id="createBtn">Créer la partie</button></div>
+</section>
+
+<!-- ===== Partie ===== -->
+<section id="game" class="hidden">
+  <div class="top">
+    <span class="pill code" id="hCode"></span>
+    <span class="pill" id="hMode"></span>
+    <span class="pill" id="hQ"></span>
+    <span class="spacer"></span>
+    <span class="pill" id="hPlayers"></span>
+    <span class="pill" id="hScore"></span>
+  </div>
+
+  <div class="wrap">
+    <!-- Lobby -->
+    <div id="vLobby" class="lobby hidden">
+      <div>
+        <div class="joinbox">
+          <div>Sur ton téléphone ou ton ordi, va sur</div>
+          <div class="url" id="joinUrl"></div>
+          <div style="margin-top:14px">et entre le code</div>
+          <div class="bigcode" id="bigCode"></div>
+        </div>
+        <div class="label">Joueurs connectés (<span id="nbPlayers">0</span>) — clique sur un nom pour le retirer</div>
+        <div class="chips" id="lobbyPlayers"></div>
+        <div class="warn hidden" id="impWarn">Mode Imposteur : il faut au moins 3 joueurs pour qu'il y ait un imposteur.</div>
+        <div class="ctrls"><button class="btn" id="startBtn">Lancer la partie</button></div>
+      </div>
+      <div><div id="qr"></div></div>
+    </div>
+
+    <!-- Question -->
+    <div id="vPlay" class="hidden">
+      <div class="phasebar"><div class="phase" id="phase"></div><div class="timer" id="timerEl"></div></div>
+      <div class="cat" id="qCat"></div>
+      <div class="qtext" id="qText"></div>
+      <div class="choices" id="choices"></div>
+      <div class="reveal hidden" id="revealMsg"></div>
+      <div class="note" id="revealNote"></div>
+      <div class="status" id="status"></div>
+      <div class="chips" id="votePlayers"></div>
+      <div class="ctrls">
+        <button class="btn2" id="skipBtn"></button>
+        <button class="btn" id="nextBtn"></button>
+      </div>
+    </div>
+
+    <!-- Désignation de l'imposteur -->
+    <div id="vAccuse" class="hidden">
+      <div class="phasebar"><div class="phase">Qui est l'imposteur ?</div><div class="timer" id="timerEl2"></div></div>
+      <p class="qtext" style="font-size:1.8rem">Votez sur vos téléphones pour désigner l'imposteur.</p>
+      <div class="status" id="accStatus"></div>
+      <div class="chips" id="accPlayers"></div>
+      <div class="ctrls"><button class="btn2" id="accSkip">Clore les votes</button></div>
+    </div>
+
+    <!-- Fin -->
+    <div id="vEnd" class="hidden">
+      <div class="label">Score de la classe</div>
+      <div class="final" id="finalScore"></div>
+      <div class="box hidden" id="impBox"></div>
+      <div class="label">Détail</div>
+      <ul class="res" id="resList"></ul>
+      <div class="label">Rejouer avec les mêmes joueurs</div>
+      <div class="row">
+        <div class="field"><label for="reMode">Mode</label><select id="reMode"></select></div>
+        <button class="btn" id="restartBtn">Nouvelle partie</button>
+        <button class="btn2" id="newRoomBtn">Changer de code / réglages</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const $ = id => document.getElementById(id);
+const LETTERS = ['A', 'B', 'C', 'D'];
+const COLORS = ['var(--c0)', 'var(--c1)', 'var(--c2)', 'var(--c3)'];
+const KEY = 'quorum_host';
+let meta = { modes: [], categories: [] };
+let S = null;          // dernier état reçu
+let offset = 0;        // décalage horloge serveur
+let qrDoneFor = null;
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function store(v) { try { v ? localStorage.setItem(KEY, JSON.stringify(v)) : localStorage.removeItem(KEY); } catch (e) {} }
+function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }
+
+// ---------- Réglages ----------
+fetch('/api/meta').then(r => r.json()).then(m => {
+  meta = m;
+  $('modes').innerHTML = m.modes.map((md, i) =>
+    `<label class="mode${i === 0 ? ' sel' : ''}"><input type="radio" name="mode" value="${md.id}"${i === 0 ? ' checked' : ''}><b>${esc(md.name)}</b><span>${esc(md.desc)}</span></label>`).join('');
+  $('modes').querySelectorAll('.mode').forEach(el => el.addEventListener('click', () => {
+    $('modes').querySelectorAll('.mode').forEach(x => x.classList.remove('sel'));
+    el.classList.add('sel');
+  }));
+  $('levels').innerHTML = m.levels.map((l, i) =>
+    `<label class="chk"><input type="checkbox" value="${l.id}"${i === 0 ? ' checked' : ''}>${esc(l.name)}</label>`).join('');
+  $('cats').innerHTML = m.categories.map(c =>
+    `<label class="chk"><input type="checkbox" value="${esc(c.name)}" checked>${esc(c.name)} (<span data-count="${esc(c.name)}"></span>)</label>`).join('');
+  $('reMode').innerHTML = m.modes.map(md => `<option value="${md.id}">${esc(md.name)}</option>`).join('');
+  document.querySelectorAll('#levels input, #cats input').forEach(i => i.addEventListener('change', updateCounts));
+  updateCounts();
+});
+
+const checked = sel => [...document.querySelectorAll(sel + ' input:checked')].map(i => i.value);
+
+// Met à jour le nombre de questions selon les niveaux et catégories cochés
+function updateCounts() {
+  const levels = checked('#levels');
+  const cats = checked('#cats');
+  let dispo = 0;
+  meta.categories.forEach(c => {
+    const n = levels.reduce((a, l) => a + (c.counts[l] || 0), 0);
+    const el = document.querySelector(`[data-count="${CSS.escape(c.name)}"]`);
+    if (el) el.textContent = n;
+    if (cats.includes(c.name)) dispo += n;
+  });
+  $('dispo').textContent = levels.length && cats.length
+    ? `${dispo} questions disponibles avec cette sélection.`
+    : 'Coche au moins un niveau et une catégorie.';
+  $('createBtn').disabled = !levels.length || !cats.length || dispo < 3;
+}
+
+$('createBtn').onclick = () => {
+  const mode = (document.querySelector('input[name=mode]:checked') || {}).value;
+  socket.emit('host:create', { mode, cats: checked('#cats'), levels: checked('#levels'), nb: $('nb').value, timer: $('timer').value }, res => {
+    if (res && res.ok) store({ code: res.code, hostKey: res.hostKey });
+  });
+};
+
+socket.on('connect', () => {
+  const saved = load();
+  if (saved) socket.emit('host:resume', saved, res => { if (!res || !res.ok) { store(null); showSetup(); } });
+});
+
+function showSetup() { $('setup').classList.remove('hidden'); $('game').classList.add('hidden'); }
+
+// ---------- Boutons ----------
+$('startBtn').onclick = () => socket.emit('host:start');
+$('skipBtn').onclick = () => socket.emit('host:skip');
+$('accSkip').onclick = () => socket.emit('host:skip');
+$('nextBtn').onclick = () => socket.emit('host:next');
+$('restartBtn').onclick = () => socket.emit('host:restart', { mode: $('reMode').value });
+$('newRoomBtn').onclick = () => { store(null); location.reload(); };
+
+// ---------- Affichage ----------
+socket.on('state', s => {
+  S = s;
+  offset = s.now - Date.now();
+  render(s);
+});
+
+function show(id) {
+  ['vLobby', 'vPlay', 'vAccuse', 'vEnd'].forEach(v => $(v).classList.toggle('hidden', v !== id));
+}
+
+function chipsHtml(players, opts) {
+  return players.map(p => {
+    let cls = 'chip';
+    if (!p.connected) cls += ' off';
+    if (opts.voted && p.voted) cls += ' voted';
+    if (opts.kick) cls += ' kick';
+    const w = opts.weight ? ` ×${p.weight}` : '';
+    return `<span class="${cls}" data-name="${esc(p.name)}">${esc(p.name)}${w}</span>`;
+  }).join('');
+}
+
+function render(s) {
+  $('setup').classList.add('hidden');
+  $('game').classList.remove('hidden');
+  $('hCode').textContent = 'Code ' + s.code;
+  $('hMode').textContent = s.mode.name;
+  $('hQ').textContent = s.phase === 'lobby' ? `${s.total} questions` : `Question ${Math.min(s.qIndex + 1, s.total)} / ${s.total}`;
+  $('hPlayers').textContent = `${s.connectedCount} joueur${s.connectedCount > 1 ? 's' : ''}`;
+  $('hScore').textContent = `Score : ${s.score}`;
+
+  if (s.phase === 'lobby') return renderLobby(s);
+  if (s.phase === 'accuse') return renderAccuse(s);
+  if (s.phase === 'end') return renderEnd(s);
+  renderPlay(s);
+}
+
+function renderLobby(s) {
+  show('vLobby');
+  const url = `${location.origin}/?code=${s.code}`;
+  $('joinUrl').textContent = location.host;
+  $('bigCode').textContent = s.code;
+  if (qrDoneFor !== s.code) {
+    $('qr').innerHTML = `<img src="/qr/${s.code}" width="240" height="240" alt="QR code pour rejoindre">`;
+    qrDoneFor = s.code;
+  }
+  $('nbPlayers').textContent = s.connectedCount;
+  $('lobbyPlayers').innerHTML = chipsHtml(s.players, { kick: true });
+  $('lobbyPlayers').querySelectorAll('.chip').forEach(el => el.onclick = () => {
+    if (confirm(`Retirer ${el.dataset.name} ?`)) socket.emit('host:kick', el.dataset.name);
+  });
+  $('impWarn').classList.toggle('hidden', !(s.mode.id === 'imposteur' && s.connectedCount < 3));
+  $('startBtn').disabled = s.connectedCount < 1;
+}
+
+function phaseLabel(s) {
+  const m = s.mode.id;
+  switch (s.phase) {
+    case 'vote':
+      if (m === 'deuxtours' || m === 'imposteur') return '1er tour — vote secret';
+      if (m === 'capitaine') return 'Votez — le capitaine tranchera';
+      if (m === 'consensus') return `Mettez-vous d'accord — ${Math.round(s.threshold * 100)} % requis`;
+      if (m === 'direct') return 'Vote en direct — modifiable';
+      if (m === 'confiance') return 'Votez et misez 1, 2 ou 3';
+      if (m === 'reputation') return 'Votez — chaque vote a son poids';
+      return 'Votez !';
+    case 'debate': return 'Débat ! Convainquez les autres';
+    case 'vote2': return '2e tour — vote secret';
+    case 'captain': return `Le capitaine ${s.captainName} décide…`;
+    case 'reveal': return 'Résultat';
+  }
+  return '';
+}
+
+function renderPlay(s) {
+  show('vPlay');
+  $('phase').textContent = phaseLabel(s);
+  const q = s.question;
+  $('qCat').textContent = q ? q.cat : '';
+  $('qText').textContent = q ? q.q : '';
+
+  // Quelle répartition afficher ?
+  let data = null, note = '';
+  if (s.phase === 'reveal') data = s.result.counts;
+  else if (s.live) data = s.live;
+  else if ((s.phase === 'debate' || s.phase === 'vote2') && s.round1) { data = s.round1; note = 'Répartition du 1er tour'; }
+
+  const res = s.phase === 'reveal' ? s.result : null;
+  const total = data ? data.reduce((a, b) => a + b, 0) : 0;
+  $('choices').innerHTML = (q ? q.choices : []).map((c, i) => {
+    const pct = data && total ? Math.round(data[i] / total * 100) : 0;
+    let cls = 'tile';
+    if (res) {
+      if (i === res.correctIndex) cls += ' good'; else cls += ' dim';
+      if (i === res.answer) cls += ' picked';
+    }
+    const w = res && res.weighted ? ` <small>(poids ${res.weighted[i]})</small>` : '';
+    return `<div class="${cls}">
+      <div class="bar" style="width:${pct}%;background:${COLORS[i]}"></div>
+      <div class="letter" style="background:${COLORS[i]}">${LETTERS[i]}</div>
+      <div class="txt">${esc(c)}</div>
+      <div class="n">${data ? data[i] + w : ''}</div>
+    </div>`;
+  }).join('');
+
+  // Résultat
+  const rm = $('revealMsg');
+  if (res) {
+    rm.classList.remove('hidden');
+    if (res.noConsensus) { rm.className = 'reveal ko'; rm.textContent = 'Pas de consensus : −1 point'; }
+    else if (res.answer === null) { rm.className = 'reveal ko'; rm.textContent = 'Personne n\'a voté'; }
+    else if (res.correct) { rm.className = 'reveal ok'; rm.textContent = 'Bonne réponse ! +1'; }
+    else { rm.className = 'reveal ko'; rm.textContent = `Raté — c'était ${LETTERS[res.correctIndex]}`; }
+    let n = '';
+    if (res.captainName) n = res.captainTimeout ? `Le capitaine ${res.captainName} n'a pas choisi : la majorité a tranché.` : `Décision du capitaine ${res.captainName}.`;
+    if (res.consensus) n = 'Consensus atteint.';
+    $('revealNote').textContent = n;
+  } else {
+    rm.classList.add('hidden');
+    $('revealNote').textContent = note;
+  }
+
+  // Statut
+  if (s.phase === 'vote' || s.phase === 'vote2') {
+    $('status').innerHTML = `<b>${s.votedCount}</b> / ${s.connectedCount} ont voté`;
+    $('votePlayers').innerHTML = chipsHtml(s.players.filter(p => p.connected), { voted: true, weight: s.mode.id === 'reputation' });
+  } else {
+    $('status').innerHTML = s.phase === 'reveal' ? `Score de la classe : <b>${s.score}</b>` : '';
+    $('votePlayers').innerHTML = '';
+  }
+
+  // Boutons
+  const skipLabels = { vote: 'Clore le vote', vote2: 'Clore le vote', debate: 'Passer au 2e tour', captain: 'Forcer la majorité' };
+  $('skipBtn').classList.toggle('hidden', !skipLabels[s.phase]);
+  $('skipBtn').textContent = skipLabels[s.phase] || '';
+  $('nextBtn').classList.toggle('hidden', s.phase !== 'reveal');
+  const last = s.qIndex + 1 >= s.total;
+  $('nextBtn').textContent = last ? (s.mode.id === 'imposteur' && s.impostorCount ? 'Démasquer l\'imposteur' : 'Résultats finaux') : 'Question suivante';
+}
+
+function renderAccuse(s) {
+  show('vAccuse');
+  $('accStatus').innerHTML = `<b>${s.votedCount}</b> / ${s.connectedCount} ont voté`;
+  $('accPlayers').innerHTML = chipsHtml(s.players.filter(p => p.connected), { voted: true });
+}
+
+function renderEnd(s) {
+  show('vEnd');
+  const good = (s.results || []).filter(r => r.correct).length;
+  $('finalScore').textContent = `${s.score} pts — ${good} / ${s.total} bonnes réponses`;
+  const ir = s.impostorResult;
+  const box = $('impBox');
+  if (ir) {
+    box.classList.remove('hidden');
+    let h = '';
+    if (ir.tie) h = '<b>Égalité dans les votes :</b> personne n\'a été désigné.';
+    else if (!ir.accusedName) h = '<b>Personne n\'a voté.</b>';
+    else if (ir.found) h = `<b style="color:var(--good)">Démasqué !</b> La classe a désigné ${esc(ir.accusedName)}, qui était bien imposteur.`;
+    else h = `<b style="color:var(--bad)">Raté !</b> La classe a désigné ${esc(ir.accusedName)}, qui était innocent.`;
+    h += `<br>Imposteur${ir.impostors.length > 1 ? 's' : ''} : <b>${ir.impostors.map(esc).join(', ')}</b>`;
+    if (ir.ranking.length) h += '<br><span style="color:var(--muted)">Votes : ' + ir.ranking.map(r => `${esc(r.name)} (${r.votes})`).join(', ') + '</span>';
+    box.innerHTML = h;
+  } else box.classList.add('hidden');
+
+  $('resList').innerHTML = (s.results || []).map(r =>
+    `<li><span class="mk" style="color:${r.correct ? 'var(--good)' : 'var(--bad)'}">${r.correct ? '✓' : (r.delta < 0 ? '−1' : '✗')}</span>
+     <span>${esc(r.q)}<br><small style="color:var(--muted)">Classe : ${r.answer === null ? '—' : esc(r.answer)} · Réponse : ${esc(r.good)}</small></span></li>`).join('');
+  $('reMode').value = s.mode.id;
+}
+
+// ---------- Chrono ----------
+setInterval(() => {
+  if (!S) return;
+  const els = [$('timerEl'), $('timerEl2')];
+  if (!S.timerEnd) { els.forEach(e => e.textContent = ''); return; }
+  const left = Math.max(0, Math.ceil((S.timerEnd - (Date.now() + offset)) / 1000));
+  els.forEach(e => { e.textContent = left; e.classList.toggle('low', left <= 5); });
+}, 200);
+</script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Quorum</title>
+<style>
+:root{
+  --bg:#0f1420;--panel:#182033;--panel2:#212b42;--line:#2e3a56;--text:#f3f5fa;--muted:#98a3bb;
+  --accent:#ffc83d;--good:#2fcf74;--bad:#ef5350;
+  --c0:#e8553f;--c1:#2f7fe8;--c2:#d9a400;--c3:#22a35a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.35;min-height:100vh}
+button{font:inherit;cursor:pointer;border:0}
+.wrap{max-width:560px;margin:0 auto;padding:16px}
+.hidden{display:none!important}
+.top{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+.me{font-weight:800}
+.spacer{flex:1}
+.pill{background:var(--panel2);border-radius:999px;padding:5px 12px;font-weight:700;font-size:.9rem}
+.timer{font-size:1.4rem;font-weight:900;min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
+.timer.low{color:var(--bad)}
+
+h1{font-size:1.8rem;margin:30px 0 4px}
+.sub{color:var(--muted);margin:0 0 22px}
+input{font:inherit;width:100%;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:1.1rem;margin-bottom:12px}
+#code{text-transform:uppercase;letter-spacing:.2em;font-weight:800;text-align:center;font-size:1.5rem}
+.btn{width:100%;background:var(--accent);color:#1b1400;border-radius:12px;padding:15px;font-weight:800;font-size:1.1rem}
+.err{color:var(--bad);margin-top:8px;min-height:1.2em}
+
+.card{background:var(--panel);border-radius:16px;padding:18px;margin:14px 0}
+.big{font-size:1.4rem;font-weight:800}
+.muted{color:var(--muted)}
+.cat{color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:.8rem}
+.q{font-size:1.3rem;font-weight:800;margin:4px 0 14px}
+.phase{font-weight:800;color:var(--accent);margin-top:12px}
+
+.choice{position:relative;overflow:hidden;width:100%;display:flex;align-items:center;gap:12px;text-align:left;background:var(--panel);color:var(--text);border:3px solid transparent;border-radius:14px;padding:14px;margin-bottom:10px;min-height:64px;font-size:1.05rem;font-weight:700}
+.choice .bar{position:absolute;left:0;top:0;bottom:0;opacity:.3;transition:width .3s}
+.choice .l{position:relative;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:900;flex:none}
+.choice .t{position:relative;flex:1}
+.choice .n{position:relative;color:var(--muted);font-weight:800}
+.choice.sel{border-color:#fff}
+.choice.good{border-color:var(--good)}
+.choice.secret::after{content:"BONNE";position:relative;font-size:.7rem;background:var(--bad);color:#fff;padding:3px 6px;border-radius:6px}
+.choice:disabled{cursor:default}
+
+.mise{display:flex;gap:8px;margin:6px 0 4px}
+.mise button{flex:1;background:var(--panel2);color:var(--text);border:2px solid var(--line);border-radius:12px;padding:12px;font-weight:800}
+.mise button.sel{border-color:var(--accent);color:var(--accent)}
+
+.imp{background:#3a1717;border:2px solid var(--bad);border-radius:14px;padding:12px 14px;margin:12px 0;font-weight:700}
+.result{font-size:2rem;font-weight:900;text-align:center;margin:18px 0 6px}
+.ok{color:var(--good)}.ko{color:var(--bad)}
+.names button{width:100%;text-align:left;background:var(--panel);color:var(--text);border:2px solid transparent;border-radius:12px;padding:14px;margin-bottom:8px;font-weight:700;font-size:1.05rem}
+.names button.sel{border-color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- Rejoindre -->
+<section id="join" class="wrap">
+  <h1>Quorum</h1>
+  <p class="sub">Entre le code affiché au tableau.</p>
+  <input id="code" maxlength="4" placeholder="CODE" autocomplete="off">
+  <input id="name" maxlength="16" placeholder="Ton pseudo" autocomplete="off">
+  <button class="btn" id="joinBtn">Rejoindre</button>
+  <div class="err" id="err"></div>
+</section>
+
+<!-- Jeu -->
+<section id="game" class="hidden">
+  <div class="top">
+    <span class="me" id="meName"></span>
+    <span class="pill" id="weight"></span>
+    <span class="spacer"></span>
+    <span class="pill" id="score"></span>
+    <span class="timer" id="timer"></span>
+  </div>
+  <div class="wrap" id="main"></div>
+</section>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const $ = id => document.getElementById(id);
+const LETTERS = ['A', 'B', 'C', 'D'];
+const COLORS = ['var(--c0)', 'var(--c1)', 'var(--c2)', 'var(--c3)'];
+const KEY = 'quorum_player';
+let S = null, offset = 0;
+let pending = { key: null, choice: null, conf: null }; // pour le mode Mise de confiance
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function store(v) { try { v ? localStorage.setItem(KEY, JSON.stringify(v)) : localStorage.removeItem(KEY); } catch (e) {} }
+function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }
+
+const params = new URLSearchParams(location.search);
+if (params.get('code')) $('code').value = params.get('code').toUpperCase();
+const saved = load();
+if (saved && saved.name) $('name').value = saved.name;
+
+function join(data) {
+  socket.emit('player:join', data, res => {
+    if (res && res.ok) {
+      store({ code: res.code, pid: res.pid, name: data.name || (saved && saved.name) });
+      $('join').classList.add('hidden');
+      $('game').classList.remove('hidden');
+    } else {
+      if (data.pid) store(null);
+      $('join').classList.remove('hidden');
+      $('game').classList.add('hidden');
+      $('err').textContent = (res && res.error) || 'Erreur.';
+    }
+  });
+}
+
+$('joinBtn').onclick = () => {
+  $('err').textContent = '';
+  const code = $('code').value.trim().toUpperCase();
+  const name = $('name').value.trim();
+  const prev = load();
+  const pid = prev && prev.code === code ? prev.pid : null;
+  join({ code, name, pid });
+};
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') $('name').focus(); });
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
+
+// Reconnexion auto (téléphone en veille, réseau qui saute…)
+socket.on('connect', () => {
+  const prev = load();
+  const urlCode = params.get('code');
+  if (prev && prev.pid && (!urlCode || urlCode.toUpperCase() === prev.code)) join({ code: prev.code, pid: prev.pid, name: prev.name });
+});
+
+socket.on('kicked', () => {
+  store(null);
+  S = null;
+  $('game').classList.add('hidden');
+  $('join').classList.remove('hidden');
+  $('err').textContent = 'Le prof t\'a retiré de la partie.';
+});
+
+socket.on('state', s => { S = s; offset = s.now - Date.now(); render(s); });
+
+// ---------- Actions ----------
+function vote(i) {
+  if (S.mode.id === 'confiance') {
+    pending.choice = i;
+    if (pending.conf) socket.emit('player:vote', { choice: i, conf: pending.conf });
+    render(S);
+  } else socket.emit('player:vote', { choice: i });
+}
+function setConf(c) {
+  pending.conf = c;
+  if (pending.choice !== null) socket.emit('player:vote', { choice: pending.choice, conf: c });
+  render(S);
+}
+function captain(i) { socket.emit('player:captain', { choice: i }); }
+function accuse(id) { socket.emit('player:accuse', { target: id }); }
+
+// ---------- Affichage ----------
+function choicesHtml(s, opts) {
+  const data = opts.data;
+  const total = data ? data.reduce((a, b) => a + b, 0) : 0;
+  return s.question.choices.map((c, i) => {
+    const pct = data && total ? Math.round(data[i] / total * 100) : 0;
+    let cls = 'choice';
+    if (opts.selected === i) cls += ' sel';
+    if (opts.good === i) cls += ' good';
+    if (opts.secret === i) cls += ' secret';
+    return `<button class="${cls}" data-i="${i}" ${opts.disabled ? 'disabled' : ''}>
+      <span class="bar" style="width:${pct}%;background:${COLORS[i]}"></span>
+      <span class="l" style="background:${COLORS[i]}">${LETTERS[i]}</span>
+      <span class="t">${esc(c)}</span>
+      <span class="n">${data ? data[i] : ''}</span>
+    </button>`;
+  }).join('');
+}
+
+function impBanner(s) {
+  if (s.secret === undefined) return '';
+  return `<div class="imp">Tu es l'imposteur. Bonne réponse : ${LETTERS[s.secret]}. Fais perdre la classe sans te faire griller.</div>`;
+}
+
+function render(s) {
+  $('meName').textContent = s.me.name;
+  $('weight').classList.toggle('hidden', s.mode.id !== 'reputation');
+  $('weight').textContent = `Poids ×${s.me.weight}`;
+  $('score').textContent = `Classe : ${s.score}`;
+  const m = $('main');
+  const key = s.qIndex + ':' + s.phase;
+  if (pending.key !== key) pending = { key, choice: s.myVote ? s.myVote.choice : null, conf: s.myVote ? s.myVote.conf : null };
+
+  if (s.phase === 'lobby') {
+    m.innerHTML = `<div class="card"><div class="big">C'est bon, tu es dans la partie !</div>
+      <p class="muted">Attends que le prof lance.</p></div>
+      <div class="card"><div class="cat">Mode</div><div class="big">${esc(s.mode.name)}</div><p class="muted">${esc(s.mode.desc)}</p></div>`;
+    return;
+  }
+
+  if (s.phase === 'vote' || s.phase === 'vote2') {
+    const live = s.live;
+    const sel = s.mode.id === 'confiance' ? pending.choice : (s.myVote ? s.myVote.choice : null);
+    let h = impBanner(s);
+    h += `<div class="phase">${s.phase === 'vote2' ? '2e tour' : 'Vote'} — question ${s.qIndex + 1} / ${s.total}</div>`;
+    h += `<div class="cat">${esc(s.question.cat)}</div><div class="q">${esc(s.question.q)}</div>`;
+    h += choicesHtml(s, { data: live, selected: sel, secret: s.secret });
+    if (s.mode.id === 'confiance') {
+      h += `<div class="muted">Ta mise (ta certitude) :</div><div class="mise">` +
+        [1, 2, 3].map(c => `<button class="${pending.conf === c ? 'sel' : ''}" data-c="${c}">${c}</button>`).join('') + `</div>`;
+      if (pending.choice !== null && !pending.conf) h += `<p class="muted">Choisis une mise pour valider ton vote.</p>`;
+    }
+    if (s.myVote) h += `<p class="muted">Vote enregistré : ${LETTERS[s.myVote.choice]}${s.mode.id === 'confiance' ? ` (mise ${s.myVote.conf})` : ''}. Tu peux encore changer.</p>`;
+    if (s.mode.id === 'consensus') h += `<p class="muted">Il faut ${Math.round(s.threshold * 100)} % de la classe sur la même réponse.</p>`;
+    m.innerHTML = h;
+    m.querySelectorAll('.choice').forEach(b => b.onclick = () => vote(+b.dataset.i));
+    m.querySelectorAll('.mise button').forEach(b => b.onclick = () => setConf(+b.dataset.c));
+    return;
+  }
+
+  if (s.phase === 'debate') {
+    m.innerHTML = impBanner(s) + `<div class="phase">Débat ! Convaincs les autres avant le 2e tour</div>
+      <div class="cat">${esc(s.question.cat)}</div><div class="q">${esc(s.question.q)}</div>
+      <p class="muted">Répartition du 1er tour :</p>` + choicesHtml(s, { data: s.round1, disabled: true, secret: s.secret });
+    return;
+  }
+
+  if (s.phase === 'captain') {
+    let h = impBanner(s);
+    if (s.isCaptain) {
+      h += `<div class="phase">Tu es le capitaine ! Choisis la réponse de toute la classe.</div>`;
+      h += `<div class="q">${esc(s.question.q)}</div>` + choicesHtml(s, { data: s.live });
+    } else {
+      h += `<div class="phase">Le capitaine ${esc(s.captainName)} décide…</div><div class="q">${esc(s.question.q)}</div>` +
+        choicesHtml(s, { data: s.live, disabled: true, selected: s.myVote ? s.myVote.choice : null });
+    }
+    m.innerHTML = h;
+    if (s.isCaptain) m.querySelectorAll('.choice').forEach(b => b.onclick = () => captain(+b.dataset.i));
+    return;
+  }
+
+  if (s.phase === 'reveal') {
+    const r = s.result;
+    let msg, cls;
+    if (r.noConsensus) { msg = 'Pas de consensus : −1'; cls = 'ko'; }
+    else if (r.answer === null) { msg = 'Personne n\'a voté'; cls = 'ko'; }
+    else if (r.correct) { msg = 'Bonne réponse ! +1'; cls = 'ok'; }
+    else { msg = 'Raté !'; cls = 'ko'; }
+    let h = `<div class="result ${cls}">${msg}</div>`;
+    if (r.answer !== null) h += `<p class="muted" style="text-align:center">La classe a répondu ${LETTERS[r.answer]}.${s.myVote ? ` Toi : ${LETTERS[s.myVote.choice]} ${s.myVote.choice === r.correctIndex ? '✓' : '✗'}` : ''}</p>`;
+    h += `<div class="q">${esc(s.question.q)}</div>` + choicesHtml(s, { data: r.counts, disabled: true, good: r.correctIndex, selected: r.answer });
+    m.innerHTML = h;
+    return;
+  }
+
+  if (s.phase === 'accuse') {
+    let h = `<div class="phase">Qui est l'imposteur ?</div><p class="muted">Touche le nom de la personne que tu soupçonnes.</p>`;
+    if (s.me.isImpostor) h += `<div class="imp">Tu es l'imposteur : accuse quelqu'un d'autre pour brouiller les pistes.</div>`;
+    h += `<div class="names">` + s.accuseTargets.map(t => `<button class="${s.myAccuse === t.id ? 'sel' : ''}" data-id="${t.id}">${esc(t.name)}</button>`).join('') + `</div>`;
+    m.innerHTML = h;
+    m.querySelectorAll('.names button').forEach(b => b.onclick = () => accuse(b.dataset.id));
+    return;
+  }
+
+  if (s.phase === 'end') {
+    const good = (s.results || []).filter(r => r.correct).length;
+    let h = `<div class="result">${s.score} pts</div><p class="muted" style="text-align:center">${good} / ${s.total} bonnes réponses</p>`;
+    const ir = s.impostorResult;
+    if (ir) {
+      let t;
+      if (ir.tie) t = 'Égalité : personne n\'a été désigné.';
+      else if (!ir.accusedName) t = 'Personne n\'a voté.';
+      else if (ir.found) t = `Démasqué ! ${esc(ir.accusedName)} était bien imposteur.`;
+      else t = `Raté ! ${esc(ir.accusedName)} était innocent.`;
+      h += `<div class="card"><div class="big">${t}</div><p class="muted">Imposteur${ir.impostors.length > 1 ? 's' : ''} : ${ir.impostors.map(esc).join(', ')}</p></div>`;
+    }
+    h += `<p class="muted" style="text-align:center">Le prof peut relancer une partie.</p>`;
+    m.innerHTML = h;
+  }
+}
+
+// ---------- Chrono ----------
+setInterval(() => {
+  const el = $('timer');
+  if (!S || !S.timerEnd) { el.textContent = ''; return; }
+  const left = Math.max(0, Math.ceil((S.timerEnd - (Date.now() + offset)) / 1000));
+  el.textContent = left;
+  el.classList.toggle('low', left <= 5);
+}, 200);
+</script>
+</body>
+</html>
