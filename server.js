@@ -9,7 +9,6 @@ const QRCode = require('qrcode');
 
 const PORT = process.env.PORT || 3000;
 const CONSENSUS_THRESHOLD = 0.7; // 70 % de la classe
-const DEBATE_SEC = 30;
 const CAPTAIN_SEC = 20;
 const ACCUSE_SEC = 60;
 const MAX_PLAYERS = 40;
@@ -103,13 +102,18 @@ function sanitizeSettings(s) {
   if (!cats.length) cats = CATEGORIES.slice();
   let levels = Array.isArray(s.levels) ? s.levels.filter(l => LEVEL_IDS.includes(l)) : [];
   if (!levels.length) levels = ['college'];
-  return { mode, cats, levels, nb: clampInt(s.nb, 3, 60, 10), timer: clampInt(s.timer, 10, 120, 30) };
+  return {
+    mode, cats, levels,
+    nb: clampInt(s.nb, 3, 60, 10),
+    timer: clampInt(s.timer, 10, 300, 30),
+    debate: clampInt(s.debate, 15, 300, 60),
+  };
 }
 
 function pickQuestions(cats, levels, nb) {
   return shuffle(QUESTIONS.filter(q => cats.includes(q.cat) && levels.includes(q.lvl))).slice(0, nb).map(q => {
     const order = shuffle([0, 1, 2, 3]);
-    return { cat: q.cat, q: q.q, choices: order.map(i => q.choices[i]), a: order.indexOf(q.a) };
+    return { cat: q.cat, q: q.q, choices: order.map(i => q.choices[i]), a: order.indexOf(q.a), ex: q.ex || '' };
   });
 }
 
@@ -244,7 +248,7 @@ function advance(room) {
       if (TWO_ROUND_MODES.has(mode)) {
         room.round1 = counts(room);
         room.votes = new Map();
-        setPhase(room, 'debate', DEBATE_SEC);
+        setPhase(room, 'debate', room.settings.debate);
       } else if (mode === 'capitaine') {
         const cap = pickCaptain(room);
         if (cap) { room.captainId = cap.id; setPhase(room, 'captain', CAPTAIN_SEC); }
@@ -289,6 +293,7 @@ function resolve(room, answer, opts) {
   room.result = {
     answer,
     correctIndex: q.a,
+    ex: q.ex,
     correct,
     delta,
     counts: counts(room),
