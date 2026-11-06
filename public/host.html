@@ -76,7 +76,10 @@ h1{font-size:2.2rem;margin:0 0 4px}
 .tile .letter{position:relative;width:52px;height:52px;border-radius:12px;display:grid;place-items:center;font-weight:900;font-size:1.5rem;color:#fff;flex:none}
 .tile .txt{position:relative;font-size:1.6rem;font-weight:700;flex:1}
 .tile .n{position:relative;font-size:1.5rem;font-weight:800;color:var(--muted)}
-.tile.good{border-color:var(--good)}
+.tile.good{border-color:var(--good);background:#16402b}
+.tile.good .bar{background:var(--good)!important;opacity:.35}
+.tile.good .n{color:#c9f7dc}
+.tile.good .letter{background:var(--good)!important}
 .tile.dim{opacity:.45}
 .tile.picked{opacity:1;border-color:var(--bad)}
 .tile.picked.good{border-color:var(--good)}
@@ -87,6 +90,9 @@ h1{font-size:2.2rem;margin:0 0 4px}
 .reveal{font-size:2rem;font-weight:900;margin:18px 0 0}
 .reveal.ok{color:var(--good)}.reveal.ko{color:var(--bad)}
 .note{color:var(--muted);font-size:1.1rem;margin-top:6px}
+.ex{background:var(--panel);border-left:5px solid var(--good);border-radius:12px;padding:16px 20px;margin-top:16px;font-size:1.35rem;line-height:1.45}
+.ex:empty{display:none}
+.hint{color:var(--muted);font-weight:400;font-size:.85rem}
 
 /* Fin */
 .final{font-size:4rem;font-weight:900;color:var(--accent)}
@@ -124,7 +130,10 @@ h1{font-size:2.2rem;margin:0 0 4px}
   <div class="row">
     <div class="field"><label for="nb">Nombre de questions</label><input id="nb" type="number" min="3" max="60" value="10"></div>
     <div class="field"><label for="timer">Durée d'un vote</label>
-      <select id="timer"><option value="15">15 s</option><option value="20">20 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="90">90 s</option></select>
+      <select id="timer"><option value="15">15 s</option><option value="20">20 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">1 min</option><option value="90">1 min 30</option><option value="120">2 min</option><option value="180">3 min</option><option value="300">5 min</option></select>
+    </div>
+    <div class="field"><label for="debate">Durée du débat <span class="hint">(Deux tours, Imposteur)</span></label>
+      <select id="debate"><option value="30">30 s</option><option value="60" selected>1 min</option><option value="90">1 min 30</option><option value="120">2 min</option><option value="180">3 min</option><option value="300">5 min</option></select>
     </div>
   </div>
 
@@ -177,6 +186,7 @@ h1{font-size:2.2rem;margin:0 0 4px}
       <div class="choices" id="choices"></div>
       <div class="reveal hidden" id="revealMsg"></div>
       <div class="note" id="revealNote"></div>
+      <div class="ex" id="exBox"></div>
       <div class="status" id="status"></div>
       <div class="chips" id="votePlayers"></div>
       <div class="ctrls">
@@ -266,7 +276,7 @@ function updateCounts() {
 
 $('createBtn').onclick = () => {
   const mode = (document.querySelector('input[name=mode]:checked') || {}).value;
-  socket.emit('host:create', { mode, cats: checked('#cats'), levels: checked('#levels'), nb: $('nb').value, timer: $('timer').value }, res => {
+  socket.emit('host:create', { mode, cats: checked('#cats'), levels: checked('#levels'), nb: $('nb').value, timer: $('timer').value, debate: $('debate').value }, res => {
     if (res && res.ok) { store({ code: res.code, hostKey: res.hostKey }); inGame = true; }
   });
 };
@@ -450,9 +460,11 @@ function renderPlay(s) {
     if (res.captainName) n = res.captainTimeout ? `Le capitaine ${res.captainName} n'a pas choisi : la majorité a tranché.` : `Décision du capitaine ${res.captainName}.`;
     if (res.consensus) n = 'Consensus atteint.';
     $('revealNote').textContent = n;
+    $('exBox').textContent = res.ex || '';
   } else {
     rm.classList.add('hidden');
     $('revealNote').textContent = note;
+    $('exBox').textContent = '';
   }
 
   // Statut

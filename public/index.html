@@ -48,7 +48,11 @@ input{font:inherit;width:100%;background:var(--panel);color:var(--text);border:1
 .choice .t{position:relative;flex:1}
 .choice .n{position:relative;color:var(--muted);font-weight:800}
 .choice.sel{border-color:#fff}
-.choice.good{border-color:var(--good)}
+.choice.good{border-color:var(--good);background:#16402b}
+.choice.good .bar{background:var(--good)!important;opacity:.35}
+.choice.good .n{color:#c9f7dc}
+.choice.good .l{background:var(--good)!important}
+.ex{background:var(--panel);border-left:4px solid var(--good);border-radius:12px;padding:12px 14px;margin:6px 0 14px;line-height:1.45}
 .choice.secret::after{content:"BONNE";position:relative;font-size:.7rem;background:var(--bad);color:#fff;padding:3px 6px;border-radius:6px}
 .choice:disabled{cursor:default}
 
@@ -269,6 +273,7 @@ function render(s) {
     let h = `<div class="result ${cls}">${msg}</div>`;
     if (r.answer !== null) h += `<p class="muted" style="text-align:center">La classe a répondu ${LETTERS[r.answer]}.${s.myVote ? ` Toi : ${LETTERS[s.myVote.choice]} ${s.myVote.choice === r.correctIndex ? '✓' : '✗'}` : ''}</p>`;
     h += `<div class="q">${esc(s.question.q)}</div>` + choicesHtml(s, { data: r.counts, disabled: true, good: r.correctIndex, selected: r.answer });
+    if (r.ex) h += `<div class="ex">${esc(r.ex)}</div>`;
     m.innerHTML = h;
     return;
   }
